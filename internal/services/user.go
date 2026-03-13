@@ -17,7 +17,7 @@ func NewUserService(db *gorm.DB) *UserService {
 }
 
 // GetByID returns a user by their ID.
-func (s *UserService) GetByID(id string) (*models.User, error) {
+func (s *UserService) GetByID(id uint) (*models.User, error) {
 	var user models.User
 	if err := s.db.First(&user, "id = ?", id).Error; err != nil {
 		return nil, err

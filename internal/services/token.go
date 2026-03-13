@@ -12,7 +12,7 @@ import (
 // GenerateJWT creates a signed token containing the user's ID and role.
 func GenerateJWT(user *models.User, secret string) (string, error) {
 	claims := jwt.MapClaims{
-		"sub":  user.ID,
+		"sub":  float64(user.ID), // JWT parses numbers as float64
 		"role": user.Role,
 		"exp":  time.Now().Add(24 * time.Hour).Unix(),
 	}

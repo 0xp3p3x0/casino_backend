@@ -2,13 +2,25 @@ package services
 
 import (
 	"casino-backend/internal/models"
+	"crypto/rand"
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
+
+const referralCodeChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+const referralCodeLen = 8
+
+func generateReferralCode() string {
+	b := make([]byte, referralCodeLen)
+	_, _ = rand.Read(b)
+	for i := range b {
+		b[i] = referralCodeChars[int(b[i])%len(referralCodeChars)]
+	}
+	return string(b)
+}
 
 // AuthServiceInterface exposes just enough methods for the
 // authentication middleware. The concrete service provides
@@ -30,22 +42,43 @@ func NewAuthService(db *gorm.DB, cfg *models.Config) *AuthService {
 	return &AuthService{db: db, cfg: cfg}
 }
 
-// Register creates a new user with a hashed password. The role
-// field is sanitized to one of the supported values.
-func (s *AuthService) Register(username, password, role string) (*models.User, error) {
+// RegisterInput holds optional fields for registration.
+type RegisterInput struct {
+	Username     string
+	Email        string
+	Password     string
+	Nickname     string
+	PhoneNumber  string
+	ReferrerCode string
+	Role         string
+}
+
+// Register creates a new user with a hashed password. Email and username are required.
+// Role is sanitized to one of the supported values. Assigns Level 1, Status active,
+// and a generated referral code.
+func (s *AuthService) Register(in RegisterInput) (*models.User, error) {
+	role := in.Role
 	if role != models.RoleAdmin && role != models.RoleUser {
 		role = models.RoleUser
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now()
 	user := &models.User{
-		ID:           uuid.NewString(),
-		Username:     username,
+		Username:     in.Username,
+		Nickname:     in.Nickname,
+		Email:        in.Email,
+		PhoneNumber:  in.PhoneNumber,
+		Level:        1,
+		ReferralCode: generateReferralCode(),
+		RefererCode:  in.ReferrerCode,
 		PasswordHash: string(hash),
 		Role:         role,
-		CreatedAt:    time.Now(),
+		Status:       "active",
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 	if err := s.db.Create(user).Error; err != nil {
 		return nil, err
@@ -53,11 +86,10 @@ func (s *AuthService) Register(username, password, role string) (*models.User, e
 	return user, nil
 }
 
-// Login checks supplied credentials and returns a signed JWT when
-// they are valid.
-func (s *AuthService) Login(username, password string) (string, error) {
+// Login checks supplied credentials (username or email) and returns a signed JWT when valid.
+func (s *AuthService) Login(usernameOrEmail, password string) (string, error) {
 	var user models.User
-	if err := s.db.Where("username = ?", username).First(&user).Error; err != nil {
+	if err := s.db.Where("username = ? OR email = ?", usernameOrEmail, usernameOrEmail).First(&user).Error; err != nil {
 		return "", err
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
@@ -74,8 +106,15 @@ func (s *AuthService) GetUserFromToken(tokenString string, isAdmin bool) (*model
 	if err != nil {
 		return nil, err
 	}
-	uid, ok := (*claims)["sub"].(string)
+	sub, ok := (*claims)["sub"]
 	if !ok {
+		return nil, errors.New("invalid token claims")
+	}
+	var uid uint
+	switch v := sub.(type) {
+	case float64:
+		uid = uint(v)
+	default:
 		return nil, errors.New("invalid token claims")
 	}
 	if isAdmin {

@@ -19,11 +19,15 @@ func NewAuthHandler(authService *services.AuthService) *AuthHandler {
 
 // registerRequest is the expected body for /auth/register.
 type registerRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Username     string `json:"username" binding:"required"`
+	Email        string `json:"email" binding:"required"`
+	Password     string `json:"password" binding:"required"`
+	Nickname     string `json:"nickname" binding:"required"`
+	PhoneNumber  string `json:"phone_number" binding:"required"`
+	ReferrerCode string `json:"referrer_code"`
 }
 
-// loginRequest is the expected body for /auth/login.
+// loginRequest is the expected body for /auth/login. Username can be username or email.
 type loginRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
@@ -36,13 +40,33 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	user, err := h.authService.Register(req.Username, req.Password, "user")
+	user, err := h.authService.Register(services.RegisterInput{
+		Username:     req.Username,
+		Email:        req.Email,
+		Password:     req.Password,
+		Nickname:     req.Nickname,
+		PhoneNumber:  req.PhoneNumber,
+		ReferrerCode: req.ReferrerCode,
+		Role:         "user",
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	// do not expose password hash
-	c.JSON(http.StatusCreated, gin.H{"user": gin.H{"id": user.ID, "username": user.Username, "role": user.Role}})
+	c.JSON(http.StatusCreated, gin.H{
+		"user": gin.H{
+			"id":            user.ID,
+			"username":      user.Username,
+			"nickname":      user.Nickname,
+			"email":         user.Email,
+			"phone_number":  user.PhoneNumber,
+			"referral_code": user.ReferralCode,
+			"level":         user.Level,
+			"role":          user.Role,
+			"status":        user.Status,
+			"created_at":    user.CreatedAt,
+		},
+	})
 }
 
 // Login authenticates a user and returns a JWT.

@@ -37,14 +37,11 @@ func Init(cfg *models.Config) *gorm.DB {
 	if err != nil {
 		log.Fatalf("failed to connect to PostgreSQL: %v", err)
 	}
+
 	// Auto-migrate the tables we care about
-	if err := db.AutoMigrate(&models.User{}, &models.Role{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Wallet{}); err != nil {
 		log.Fatalf("failed to automigrate: %v", err)
 	}
-
-	// ensure basic roles exist
-	db.FirstOrCreate(&models.Role{}, models.Role{Name: models.RoleUser})
-	db.FirstOrCreate(&models.Role{}, models.Role{Name: models.RoleAdmin})
 
 	return db
 }
