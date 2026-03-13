@@ -1,0 +1,61 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# OS / Editor junk
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+$RECYCLE.BIN/
+
+# Go-specific
+/bin/
+/build/
+/dist/
+*.log
+
+# Dependency directories (if you're not using Go modules)
+vendor/
+
+# Go modules
+go.sum
+go.work
+go.work.sum
+
+# Environment files
+.env
+.env.*
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+
+# Migration files (if generated)
+migrations/*.sql
+
+# Test binaries or coverage files
+coverage.out
+*.coverprofile
+*.test
+
+# AWS credentials (you should use environment variables or IAM roles)
+.aws/
+
+# Node modules (if using any JS tooling)
+node_modules/
+
+# Compiled protobuf or generated files (optional)
+*.pb.go
+*.pb.validate.go
+
+# Secrets directory
+secrets/
+*.key
