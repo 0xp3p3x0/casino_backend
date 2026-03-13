@@ -1,43 +1,77 @@
-package main
+package server
 
 import (
-	"casino-backend/internal/config"
-	"casino-backend/internal/db"
-	"casino-backend/internal/logger"
-	"casino-backend/internal/server"
-	"log"
+	"casino-backend/internal/handlers"
+	"casino-backend/internal/middleware"
+	"casino-backend/internal/services"
+	"casino-backend/internal/websocket"
+	"net/http"
 
-	"github.com/joho/godotenv"
+	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 )
 
-func main() {
-	// Load .env file
-	if err := godotenv.Load(); err != nil {
-		log.Printf("Warning: Error loading .env file: %v", err)
-		// Don't fatal here, as .env might not exist in production
+// Handlers contains all the handlers for the application
+type Handlers struct {
+	Auth *handlers.AuthHandler
+}
+
+func SetupRouter(
+	authService *services.AuthService,
+	userService *services.UserService,
+) *gin.Engine {
+	router := gin.Default()
+
+	// Add logging middleware
+	router.Use(middleware.LoggingMiddleware())
+
+	// Add CORS middleware
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:8080", "https://www.fantasygaming.games", "https://fantasygaming.games"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
+	// Health check endpoints
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Service is running"})
+	})
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Service is healthy"})
+	})
+
+	// create handler instances
+	authHandler := handlers.NewAuthHandler(authService)
+	userHandler := handlers.NewUserHandler(userService)
+
+	// Public routes
+	public := router.Group("/api/v1")
+	{
+		public.POST("/auth/register", authHandler.Register)
+		public.POST("/auth/login", authHandler.Login)
 	}
 
-	// Initialize logger
-	if err := logger.Init(); err != nil {
-		logger.Fatalf("Failed to initialize logger: %v", err)
-	}
-	defer logger.Close()
-
-	// Load configuration
-	cfg := config.LoadConfig()
-
-	// Initialize database
-	database := db.Init(cfg)
-
-	// Create and start server
-	srv, err := server.NewServer(database, cfg)
-	if err != nil {
-		log.Fatalf("Failed to create server: %v", err)
-		logger.Fatalf("Failed to create server: %v", err)
+	// Protected routes (accessible to any authenticated user)
+	protected := router.Group("/api/v1")
+	protected.Use(middleware.AuthMiddleware(authService, false))
+	{
+		protected.GET("/profile", userHandler.Profile)
 	}
 
-	if err := srv.Run(cfg.Port); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
-		logger.Fatalf("Failed to start server: %v", err)
+	// Admin-only routes
+	admin := router.Group("/api/v1/admin")
+	admin.Use(middleware.AuthMiddleware(authService, true))
+	{
+		admin.GET("/users", userHandler.GetAllUsers)
 	}
+
+	// WebSocket endpoint
+	router.GET("/ws", websocket.WebsocketHandler(authService, userService))
+
+	return router
 }
